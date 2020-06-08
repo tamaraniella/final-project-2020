@@ -19,6 +19,7 @@ library(doParallel)
 library(tictoc)
 library(vip)
 library(xgboost)
+library(rio)
 ```
 
 ```{r importing data}
@@ -133,9 +134,14 @@ tune_tree_lr <- tune_grid(wf_tune_lr, cv, grid = grd, control = tune::control_re
 toc()
 
 
-control = tune::control_resamples(verbose = TRUE,
-                                    save_pred = TRUE))
+#control = tune::control_resamples(verbose = TRUE, save_pred = TRUE)
 
+```
+
+```{r metrics fit2}
+collect_metrics(tune_tree_lr)
+
+show_best(tune_tree_lr, "rmse")
 ```
 
 ```{r plot}
