@@ -115,6 +115,7 @@ toc()
 
 ```{r metrics fit1}
 collect_metrics(fit1)
+#base model best fit is 100
 ```
 
 ```{r model2}
@@ -133,9 +134,7 @@ tic()
 tune_tree_lr <- tune_grid(wf_tune_lr, cv, grid = grd, control = tune::control_resamples(verbose = TRUE, save_pred = TRUE))
 toc()
 
-
-#control = tune::control_resamples(verbose = TRUE, save_pred = TRUE)
-
+#best learning rate from this model was 0.005  rmse    standard   104.       10  2.51  
 ```
 
 ```{r metrics fit2}
@@ -157,5 +156,102 @@ highlight <- to_plot %>%
   select(learn_rate) %>% 
   semi_join(to_plot, .)
 
+ggplot(to_plot, aes(learn_rate, mean)) +
+  geom_point() +
+  geom_point(color = "#de4f69", data = highlight) +
+  facet_wrap(~.metric, scales = "free_y")
 
 ```
+
+```{r find best learn rate}
+tune_lr2 <- mod %>% 
+  set_args(trees = 6000,
+           learn_rate = tune(),
+           stop_iter = 20,
+           validation = 0.2)
+
+wf_tune_lr <- wf_df %>% 
+  update_model(tune_lr2)
+
+grd <- expand.grid(learn_rate = seq(0.0001, 0.1, length.out = 15))
+
+tic()
+tune_tree_lr2 <- tune_grid(wf_tune_lr, cv, grid = grd, control = tune::control_resamples(verbose = TRUE, save_pred = TRUE))
+toc()
+```
+
+```{r metrics fit3}
+collect_metrics(tune_tree_lr2)
+
+show_best(tune_tree_lr2, "rmse")
+
+#best model had a learn rate of  0.00724 and a rsme of 105
+```
+
+```{r plot}
+to_plot2 <- tune_tree_lr2 %>% 
+  unnest(.metrics) %>% 
+  group_by(.metric, learn_rate) %>% 
+  summarize(mean = mean(.estimate, na.rm = TRUE)) %>% 
+  filter(learn_rate != 0.0001) 
+
+highlight2 <- to_plot2 %>% 
+  filter(.metric == "rmse" & mean == min(mean)) %>%
+  ungroup() %>% 
+  select(learn_rate) %>% 
+  semi_join(to_plot, .)
+
+ggplot(to_plot2, aes(learn_rate, mean)) +
+  geom_point() +
+  geom_point(color = "#de4f69", data = highlight2) +
+  facet_wrap(~.metric, scales = "free_y")
+
+```
+
+```{r tuning tree depth}
+tune_depth <- tune_lr %>% 
+  finalize_model(select_best(tune_tree_lr, "rmse")) %>% 
+  set_args(tree_depth = tune(),
+           min_n = tune())
+
+wf_tune_depth <- wf_df %>% 
+  update_model(tune_depth)
+
+grd <- grid_max_entropy(tree_depth(), min_n(), size = 30)
+
+tic()
+tune_tree_depth <- tune_grid(wf_tune_depth, cv, grid = grd, control = tune::control_resamples(verbose = TRUE, save_pred = TRUE))
+toc()
+
+# best is min n of 38, tree depth of 1, with an rmse of 93.9
+```
+
+```{r metrics fit4}
+collect_metrics(tune_tree_depth)
+
+show_best(tune_tree_depth, "rmse")
+
+#best model had a learn rate of  0.00724 and a rsme of 105
+```
+
+```{r}
+autoplot(tune_tree_depth)
+```
+
+```{r}
+tune_loss <- tune_depth %>% 
+  finalize_model(select_best(tune_tree_depth, "rmse")) %>% 
+  set_args(loss_reduction = tune(),
+           tree_depth = 1)
+
+wf_tune_reg <- wf_df %>% 
+  update_model(tune_loss)
+
+grd <- expand.grid(loss_reduction = seq(0, 100, 5))
+
+tic()
+tune_tree_reg <- tune_grid(wf_tune_reg, cv, grid = grd)
+toc()
+
+```
+
