@@ -26,7 +26,7 @@ library(rio)
 set.seed(2000)
 full_train <- read_csv(here::here("data", "train.csv"))  %>% 
     select(-classification)  %>% 
-    sample_frac(.01)
+    sample_frac(.05)
 
 frl <- import("https://nces.ed.gov/ccd/Data/zip/ccd_sch_033_1718_l_1a_083118.zip",
               setclass = "tbl_df")  %>% 
@@ -79,17 +79,6 @@ rec <- recipe(score ~ ., train) %>%
   step_unknown(all_nominal()) %>% 
   step_medianimpute(all_numeric(), -all_outcomes(), -has_role("id vars"))  %>% 
   step_dummy(all_nominal(), -has_role("id vars")) %>% 
-  step_nzv(all_predictors())
-
-# our old recipe
-rec3 <- recipe(score ~ ., train) %>% 
-  step_mutate(tst_dt = lubridate::mdy_hms(tst_dt)) %>%
-  update_role(contains("id"), ncessch, new_role = "id vars") %>% 
-  step_medianimpute(all_numeric(), -all_outcomes(), -has_role("id vars"))  %>% 
-  step_novel(all_nominal()) %>%
-  step_unknown(all_nominal()) %>% 
-  step_nzv(all_predictors(), freq_cut = 0, unique_cut = 0)  %>% 
-  step_dummy(all_nominal())  %>% 
   step_nzv(all_predictors())
 ```
 
@@ -231,7 +220,7 @@ collect_metrics(tune_tree_depth)
 
 show_best(tune_tree_depth, "rmse")
 
-#best model had a learn rate of  0.00724 and a rsme of 105
+#best model had a depth of 1, min_n of 38 and rmse of 93.9
 ```
 
 ```{r}
@@ -250,8 +239,84 @@ wf_tune_reg <- wf_df %>%
 grd <- expand.grid(loss_reduction = seq(0, 100, 5))
 
 tic()
-tune_tree_reg <- tune_grid(wf_tune_reg, cv, grid = grd)
+tune_tree_reg <- tune_grid(wf_tune_reg, cv, grid = grd, control = tune::control_resamples(verbose = TRUE, save_pred = TRUE))
 toc()
 
 ```
 
+```{r metrics loss model}
+collect_metrics(tune_tree_reg)
+
+show_best(tune_tree_reg, "rmse")
+
+# no improvement on last model
+```
+
+```{r tuning randomness}
+tune_rand <- tune_loss %>%
+  finalize_model(select_best(tune_tree_reg, "rmse")) %>% 
+  set_args(mtry = tune(),
+           sample_size = tune())
+
+wf_tune_rand <- wf_df %>% 
+  update_model(tune_rand)
+
+grd <- grid_max_entropy(finalize(mtry(), juice(prep(rec))), 
+                        sample_size = sample_prop(), 
+                        size = 30)
+
+tic()
+tune_tree_rand <- tune_grid(wf_tune_rand, cv, grid = grd,control = tune::control_resamples(verbose = TRUE, save_pred = TRUE))
+toc()
+```
+
+```{r metrics randomness model}
+collect_metrics(tune_tree_rand)
+
+show_best(tune_tree_rand, "rmse")
+
+# best model has an mtry of 20, sample size of 0.762 and mean 93.8
+
+autoplot(tune_tree_rand)
+```
+
+```{r prepping for predictions}
+# Select best tuning parameters
+tune_tree_best <- tune_tree_rand %>%
+  select_best(metric = "rmse")
+
+# Finalize your model using the best tuning parameters
+tune_tree_final <- tune_rand %>%
+    finalize_model(tune_tree_best)
+
+rec_tree_final <- rec %>% 
+   finalize_recipe(tune_tree_best)
+
+prepped_train <- rec_tree_final  %>% 
+  prep() %>% 
+  bake(train)  %>% 
+  select(-contains("id"), -ncessch)
+
+real_test <- read_csv(here::here("data", "train.csv"), 
+                       col_types = cols(.default = col_guess(), calc_admn_cd = col_character()))  %>% 
+  left_join(frl)
+
+prepped_test <- rec_tree_final  %>% 
+  prep()  %>%  
+  bake(real_test) %>%
+  select(-contains("id"), -ncessch)
+
+full_train_fit <- fit(tune_tree_final, score ~ ., prepped_train)
+
+```
+
+
+
+```{r predictions}
+
+preds <- predict(full_train_fit, new_data = prepped_test)
+
+pred_file <- tibble(Id = real_test$id, Predicted = preds$.pred) 
+
+write_csv(pred_file, "final_submission.csv")
+```
