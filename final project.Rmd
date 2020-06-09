@@ -278,6 +278,30 @@ show_best(tune_tree_rand, "rmse")
 # best model has an mtry of 20, sample size of 0.762 and mean 93.8
 
 autoplot(tune_tree_rand)
+
+to_plot_rand <- tune_tree_rand %>% 
+  unnest(.metrics) %>% 
+  group_by(.metric, mtry, sample_size) %>% 
+  summarize(mean = mean(.estimate, na.rm = TRUE)) %>% 
+  filter(.metric == "rmse") %>%
+  ungroup() %>% 
+  pivot_longer(cols = c(mtry, sample_size), 
+               names_to = "tuning_param", 
+               values_to = "tuning_val")
+
+highlight_rand <- to_plot_rand %>% 
+  filter(mean == min(mean))
+  
+ggplot(to_plot_rand, aes(tuning_val, mean)) +
+  geom_point() +
+  geom_point(color = "#de4f69", data = highlight_rand) +
+  facet_wrap(~tuning_param) +
+  labs(title = "Mean after tuning randomness using mtry and sample size",
+       subtitle = "Best RMSE identified by red point",
+       x = "Tuning value")+
+  theme_minimal()
+
+
 ```
 
 ```{r prepping for predictions}
@@ -297,8 +321,7 @@ prepped_train <- rec_tree_final  %>%
   bake(train)  %>% 
   select(-contains("id"), -ncessch)
 
-real_test <- read_csv(here::here("data", "train.csv"), 
-                       col_types = cols(.default = col_guess(), calc_admn_cd = col_character()))  %>% 
+real_test <- read_csv(here::here("data", "test.csv"), col_types = cols(.default = col_guess(), calc_admn_cd = col_character())) %>% 
   left_join(frl)
 
 prepped_test <- rec_tree_final  %>% 
