@@ -152,7 +152,12 @@ highlight <- to_plot %>%
 ggplot(to_plot, aes(learn_rate, mean)) +
   geom_point() +
   geom_point(color = "#de4f69", data = highlight) +
-  facet_wrap(~.metric, scales = "free_y")
+  facet_wrap(~.metric, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "RSME and RSQ after tuning learning rate",
+       subtitle = "Best learning rate indicated by red point",
+       x = "Learn rate",
+       y = "Mean")
 
 ```
 
@@ -300,9 +305,10 @@ ggplot(to_plot_rand, aes(tuning_val, mean)) +
   geom_point() +
   geom_point(color = "#de4f69", data = highlight_rand) +
   facet_wrap(~tuning_param) +
-  labs(title = "Mean after tuning randomness using mtry and sample size",
+  labs(title = "Mean RSME after tuning randomness using mtry and sample size",
        subtitle = "Best RMSE identified by red point",
-       x = "Tuning value")+
+       x = "Tuning value",
+       y = "Mean") +
   theme_minimal()
 
 
