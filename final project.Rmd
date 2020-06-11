@@ -2,10 +2,14 @@
 title: "Final fit"
 author: "Kathryn Denning"
 date: "6/4/2020"
-output: html_document
-editor_options: 
-  chunk_output_type: console
-     dev: png
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    dev: png
+  pdf_document:
+    dev: cairo_pdf
+    latex_engine: xelatex
 editor_options: 
   chunk_output_type: console
 ---
@@ -136,7 +140,7 @@ collect_metrics(tune_tree_lr)
 show_best(tune_tree_lr, "rmse")
 ```
 
-```{r plot}
+```{r plot fit2}
 to_plot <- tune_tree_lr %>% 
   unnest(.metrics) %>% 
   group_by(.metric, learn_rate) %>% 
@@ -310,8 +314,6 @@ ggplot(to_plot_rand, aes(tuning_val, mean)) +
        x = "Tuning value",
        y = "Mean") +
   theme_minimal()
-
-
 ```
 
 ```{r prepping for predictions}
